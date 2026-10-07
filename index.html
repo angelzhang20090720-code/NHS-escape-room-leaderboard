@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NHS Escape Room Leaderboard</title>
+<style>
+  :root { --blue:#005EB8; --dark:#003087; --pale:#E8EDEE; --white:#fff; --yellow:#FFB81C; --text:#212B32; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; font-family: Frutiger, "Frutiger W01", Arial, sans-serif; background:var(--pale); color:var(--text); }
+  header { background:var(--blue); color:var(--white); padding:28px 24px; text-align:center; border-bottom:8px solid var(--dark); }
+  header h1 { margin:0; font-size:clamp(2rem,5vw,3.5rem); }
+  header p { margin:6px 0 0; font-size:clamp(1rem,2vw,1.4rem); opacity:.9; }
+  main { max-width:900px; margin:0 auto; padding:24px 16px 48px; }
+  #board { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+  .row { display:grid; grid-template-columns:70px 1fr auto; align-items:center; gap:16px; background:var(--white);
+         border-left:8px solid var(--blue); padding:16px 20px; font-size:clamp(1.2rem,2.6vw,1.8rem); }
+  .rank { font-weight:700; color:var(--dark); }
+  .name { font-weight:700; overflow-wrap:anywhere; }
+  .time { font-variant-numeric:tabular-nums; font-weight:700; color:var(--dark); }
+  .row.winner { background:var(--yellow); border-left-color:var(--dark); font-size:clamp(1.6rem,4vw,2.6rem);
+                padding:26px 24px; box-shadow:0 0 0 4px var(--dark); }
+  .row.winner .rank, .row.winner .time { color:var(--text); }
+  .badge { display:inline-block; margin-left:12px; padding:2px 12px; background:var(--dark); color:var(--white);
+           font-size:.45em; font-weight:700; vertical-align:middle; }
+  .row.fresh { animation:flash 1.6s ease-out; }
+  @keyframes flash { from { background:#7CC4F5; } }
+  @media (prefers-reduced-motion:reduce) { .row.fresh { animation:none; } }
+  .empty { background:var(--white); padding:32px; text-align:center; font-size:1.3rem; border-left:8px solid var(--blue); }
+  #status { text-align:center; margin-top:24px; font-size:.95rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>NHS Escape Room Leaderboard</h1>
+  <p>Fastest escape time wins</p>
+</header>
+<main>
+  <ol id="board" aria-live="polite"><li class="empty">Loading results...</li></ol>
+  <p id="status"></p>
+</main>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  // PASTE YOUR FIREBASE CONFIG HERE (same as in admin.html)
+  const firebaseConfig = {
+    apiKey: "AIzaSyDx3B0-yMdfhg7sRWwaelhYCfbcM-q-eDA",
+    authDomain: "nhs-escape-room.firebaseapp.com",
+    databaseURL: "https://nhs-escape-room-default-rtdb.firebaseio.com",
+    projectId: "nhs-escape-room",
+    storageBucket: "nhs-escape-room.firebasestorage.app",
+    messagingSenderId: "734297932008",
+    appId: "1:734297932008:web:827f05d36cbdd9982c895d"
+  };
+
+  const board = document.getElementById("board");
+  const status = document.getElementById("status");
+  let lastIds = new Set();
+
+  const fmt = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const esc = t => { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; };
+
+  function render(data) {
+    const results = Object.entries(data || {})
+      .map(([id, r]) => ({ id, ...r }))
+      .sort((a, b) => a.seconds - b.seconds || a.added - b.added);
+
+    if (!results.length) {
+      board.innerHTML = '<li class="empty">No results yet. The first group to finish will appear here.</li>';
+      lastIds = new Set();
+      return;
+    }
+    const best = results[0].seconds;
+    let rank = 0, prev = null;
+    board.innerHTML = results.map((r, i) => {
+      if (r.seconds !== prev) { rank = i + 1; prev = r.seconds; }
+      const win = r.seconds === best;
+      const fresh = lastIds.size && !lastIds.has(r.id) ? " fresh" : "";
+      return `<li class="row${win ? " winner" : ""}${fresh}">
+        <span class="rank">${rank}</span>
+        <span class="name">${esc(r.name)}${win ? '<span class="badge">WINNER</span>' : ""}</span>
+        <span class="time">${fmt(r.seconds)}</span></li>`;
+    }).join("");
+    lastIds = new Set(results.map(r => r.id));
+  }
+
+  try {
+    const db = getDatabase(initializeApp(firebaseConfig));
+    onValue(ref(db, "results"), snap => { status.textContent = ""; render(snap.val()); },
+      () => { status.textContent = "Cannot load results. Check your connection and refresh."; });
+  } catch (e) {
+    status.textContent = "Leaderboard is not set up yet.";
+  }
+</script>
+</body>
+</html>
